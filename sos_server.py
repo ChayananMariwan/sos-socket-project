@@ -44,34 +44,31 @@ def send(sock, data):
     sock.send((json.dumps(data) + "\n").encode())
 
 def check_sos(board, r, c):
-    directions = [(0,1),(1,0),(1,1),(1,-1)]
+    directions = [(0,1), (1,0), (1,1), (1,-1)]
     count = 0
+    rows = len(board)
+    cols = len(board[0])
 
     for dr, dc in directions:
-
-        # Case 1: Placed letter is middle O
+        # Case 1: Placed letter is middle O (S-O-S)
         if board[r][c] == "O":
-            try:
+            if 0 <= r-dr < rows and 0 <= c-dc < cols and \
+               0 <= r+dr < rows and 0 <= c+dc < cols:
                 if board[r-dr][c-dc] == "S" and board[r+dr][c+dc] == "S":
                     count += 1
-            except:
-                pass
 
-        # Case 2: Placed letter is starting S
+        # Case 2: Placed letter is S (S-O-S starting here)
         if board[r][c] == "S":
-            try:
+            # Check forwards
+            if 0 <= r+2*dr < rows and 0 <= c+2*dc < cols:
                 if board[r+dr][c+dc] == "O" and board[r+2*dr][c+2*dc] == "S":
                     count += 1
-            except:
-                pass
-
-        # Case 3: Placed letter is ending S
-        if board[r][c] == "S":
-            try:
+            
+            # Case 3: Placed letter is S (S-O-S ending here)
+            # Check backwards
+            if 0 <= r-2*dr < rows and 0 <= c-2*dc < cols:
                 if board[r-dr][c-dc] == "O" and board[r-2*dr][c-2*dc] == "S":
                     count += 1
-            except:
-                pass
 
     return count
 
@@ -92,7 +89,6 @@ class Game:
 # ----------------------------
 # Client Handler
 # ----------------------------
-
 def handle_client(conn):
     name = None
     try:
@@ -102,7 +98,6 @@ def handle_client(conn):
                 break
 
             messages = data.decode().split("\n")
-
             for message in messages:
                 if not message.strip():
                     continue
@@ -116,131 +111,125 @@ def handle_client(conn):
                     with lock:
                         clients[conn] = sender
                         name = sender
-
                         if sender not in leaderboard:
-                            leaderboard[sender] = {
-                                "win":0,
-                                "lose":0,
-                                "tie":0
-                            }
+                            leaderboard[sender] = {"win": 0, "lose": 0, "tie": 0}
                             save_leaderboard()
-
-                    send(conn, {"msg":"Registered successfully"})
+                    send(conn, {"msg": "Registered successfully"})
 
                 # ---------------- PLAY ----------------
                 elif ptype == "play":
                     with lock:
-                        waiting_queue.append(sender)
-
+                        if sender not in waiting_queue:
+                            waiting_queue.append(sender)
+                        
                         if len(waiting_queue) >= 2:
                             p1 = waiting_queue.pop(0)
                             p2 = waiting_queue.pop(0)
-
-                            game = Game(p1,p2)
+                            game = Game(p1, p2)
                             active_games[p1] = game
                             active_games[p2] = game
 
-                            for i,p in enumerate(game.players):
-                                sock = next(s for s,n in clients.items() if n==p)
-                                send(sock,{
-                                    "msg":"Game Start",
-                                    "mark":"P"+str(i+1),
-                                    "game":{
-                                        "board":game.board,
-                                        "scores":game.scores,
-                                        "turn":game.players[game.turn]
+                            for i, p in enumerate(game.players):
+                                sock = next(s for s, n in clients.items() if n == p)
+                                send(sock, {
+                                    "msg": "Game Start",
+                                    "game": {
+                                        "board": game.board,
+                                        "scores": game.scores,
+                                        "turn": game.players[game.turn]
                                     }
                                 })
                         else:
-                            send(conn, {"msg":"Waiting for opponent..."})
+                            send(conn, {"msg": "Waiting for opponent..."})
 
                 # ---------------- MOVE ----------------
                 elif ptype == "move":
                     with lock:
                         game = active_games.get(sender)
-                        if not game:
+                        if not game or game.players[game.turn] != sender:
                             continue
 
-                        if game.players[game.turn] != sender:
-                            continue
-
-                        r = payload["row"]
-                        c = payload["col"]
-                        letter = payload["letter"]
-
+                        r, c, letter = payload["row"], payload["col"], payload["letter"]
                         if game.board[r][c] != " ":
                             continue
 
                         game.board[r][c] = letter
-                        score = check_sos(game.board,r,c)
-                        game.scores[sender]+=score
+                        score = check_sos(game.board, r, c)
+                        game.scores[sender] += score
 
-                        if score==0:
-                            game.turn = 1-game.turn
+                        if score == 0:
+                            game.turn = 1 - game.turn
 
                         if board_full(game.board):
                             p1, p2 = game.players
-                            s1 = game.scores[p1]
-                            s2 = game.scores[p2]
-
+                            s1, s2 = game.scores[p1], game.scores[p2]
                             if s1 > s2:
                                 winner = p1
-                                leaderboard[p1]["win"]+=1
-                                leaderboard[p2]["lose"]+=1
+                                leaderboard[p1]["win"] += 1
+                                leaderboard[p2]["lose"] += 1
                             elif s2 > s1:
                                 winner = p2
-                                leaderboard[p2]["win"]+=1
-                                leaderboard[p1]["lose"]+=1
+                                leaderboard[p2]["win"] += 1
+                                leaderboard[p1]["lose"] += 1
                             else:
                                 winner = None
-                                leaderboard[p1]["tie"]+=1
-                                leaderboard[p2]["tie"]+=1
-
+                                leaderboard[p1]["tie"] += 1
+                                leaderboard[p2]["tie"] += 1
                             save_leaderboard()
 
                             for p in game.players:
-                                sock = next(s for s,n in clients.items() if n==p)
-                                send(sock,{
-                                    "msg":"GAME_OVER",
-                                    "board":game.board,
-                                    "scores":game.scores,
-                                    "winner":winner
-                                })
-                                del active_games[p]
+                                sock = next((s for s, n in clients.items() if n == p), None)
+                                if sock:
+                                    send(sock, {"msg": "GAME_OVER", "board": game.board, "scores": game.scores, "winner": winner})
+                                if p in active_games:
+                                    del active_games[p]
                             continue
 
                         for p in game.players:
-                            sock = next(s for s,n in clients.items() if n==p)
-                            send(sock,{
-                                "msg":"UPDATE",
-                                "board":game.board,
-                                "scores":game.scores,
-                                "turn":game.players[game.turn]
-                            })
+                            sock = next((s for s, n in clients.items() if n == p), None)
+                            if sock:
+                                send(sock, {"msg": "UPDATE", "board": game.board, "scores": game.scores, "turn": game.players[game.turn]})
 
                 # ---------------- LEADERBOARD ----------------
                 elif ptype == "leaderboard":
                     with lock:
-                        sorted_board = dict(sorted(
-                            leaderboard.items(),
-                            key=lambda x: x[1]["win"],
-                            reverse=True
-                        ))
-                    send(conn,{
-                        "msg":"LEADERBOARD",
-                        "scores":sorted_board
-                    })
+                        sorted_board = dict(sorted(leaderboard.items(), key=lambda x: x[1]["win"], reverse=True))
+                    send(conn, {"msg": "LEADERBOARD", "scores": sorted_board})
 
-    except:
-        pass
-
+    except Exception as e:
+        print(f"Error with {name}: {e}")
     finally:
         with lock:
             if name:
-                print(name, "disconnected")
-                clients.pop(conn, None)
+                print(f"Disconnected: {name}")
                 if name in waiting_queue:
                     waiting_queue.remove(name)
+                
+                if name in active_games:
+                    game = active_games[name]
+                    opponent = next((p for p in game.players if p != name), None)
+                    
+                    if opponent:
+                        leaderboard[opponent]["win"] += 1
+                        leaderboard[name]["lose"] += 1
+                        save_leaderboard()
+                        
+                        opp_sock = next((s for s, n in clients.items() if n == opponent), None)
+                        if opp_sock:
+                            send(opp_sock, {
+                                "msg": "GAME_OVER", 
+                                "winner": opponent,
+                                "board": game.board,
+                                "scores": game.scores,
+                                "reason": f"Opponent {name} disconnected."
+                            })
+                        
+                        if opponent in active_games:
+                            del active_games[opponent]
+                    
+                    del active_games[name]
+                
+                clients.pop(conn, None)
         conn.close()
 
 # ----------------------------
