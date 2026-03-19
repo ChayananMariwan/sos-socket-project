@@ -54,9 +54,109 @@ def print_board(board):
 
 # Play
 # -----------------------
-#def play_game(sock, name):
-    
+def play_game(sock, name):
+    send(sock, {
+        "type": "play",
+        "sender": name
+    })
 
+    print("\nSearching for opponent...")
+
+    while True:
+        data = receive(sock)
+        msg = data.get("msg")
+
+        # WAIT
+        if msg == "Waiting for opponent...":
+            print("Waiting for opponent...")
+
+        # GAME START
+        elif msg == "Game Start":
+            print("\n=== Game Start ===")
+
+            board = data["game"]["board"]
+            scores = data["game"]["scores"]
+            turn = data["game"]["turn"]
+
+            print_board(board)
+            print("Scores:", scores)
+            print("Turn:", turn)
+
+            if turn == name:
+                while True:
+                    try:
+                        row = int(input("Row: "))
+                        col = int(input("Col: "))
+                        letter = input("Enter S or O: ").upper()
+
+                        if letter not in ["S", "O"]:
+                            print("Invalid letter, use S or O")
+                            continue
+
+                        send(sock, {
+                            "type": "move",
+                            "sender": name,
+                            "row": row,
+                            "col": col,
+                            "letter": letter
+                        })
+                        break
+                    except:
+                        print("Invalid input, try again")
+
+        # UPDATE
+        elif msg == "UPDATE":
+            board = data["board"]
+            scores = data["scores"]
+            turn = data["turn"]
+
+            print_board(board)
+            print("Scores:", scores)
+            print("Turn:", turn)
+
+            if turn == name:
+                while True:
+                    try:
+                        row = int(input("Row: "))
+                        col = int(input("Col: "))
+                        letter = input("Enter S or O: ").upper()
+
+                        if letter not in ["S", "O"]:
+                            print("Invalid letter, use S or O")
+                            continue
+
+                        send(sock, {
+                            "type": "move",
+                            "sender": name,
+                            "row": row,
+                            "col": col,
+                            "letter": letter
+                        })
+                        break
+                    except:
+                        print("Invalid input, try again")
+
+        elif msg == "ERROR":
+            print("Error:", data.get("message", "Invalid move"))
+
+        # GAME OVER
+        elif msg == "GAME_OVER":
+            print("\n=== GAME OVER ===")
+
+            print_board(data["board"])
+            print("Scores:", data["scores"])
+
+            winner = data.get("winner")
+
+            if winner:
+                print("Winner:", winner)
+            else:
+                print("It's a tie!")
+
+            if "reason" in data:
+                print("Reason:", data["reason"])
+
+            break
 
 # Leaderboard
 # -----------------------
@@ -76,7 +176,7 @@ def show_leaderboard(sock):
             print(player, ":", 
               "{ 'win': ", stat["win"], 
               ", 'lose': ", stat["lose"], 
-              ", 'tie': ", stat["win"], "}")
+              ", 'tie': ", stat["tie"], "}")
 
 
 #   Main
@@ -106,8 +206,7 @@ def main():
         choose = input("Choose: ")
 
         if choose == "1":
-             print("Pass")
-           # play_game(sock, name)
+           play_game(sock, name)
         elif choose == "2":
              show_leaderboard(sock)
         elif choose == "3":
