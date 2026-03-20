@@ -44,23 +44,26 @@ def receive(sock):
 # Print Board
 # ----------------------------
 def print_board(board):
+    width = 18
     print()
     for i, row in enumerate(board):
-        print(" | ".join(row))
-        if i < len(board) - 1:
-            print("-" * 5)
+        line = " | ".join(row)
+        print(line.center(width))
+
+        if i < len(board):
+            print(("-" * 10).center(width))
     print()
 
 
 # Play
 # -----------------------
 def play_game(sock, name):
+    width = 18
+
     send(sock, {
         "type": "play",
         "sender": name
     })
-
-    print("\nSearching for opponent...")
 
     while True:
         data = receive(sock)
@@ -72,7 +75,7 @@ def play_game(sock, name):
 
         # GAME START
         elif msg == "Game Start":
-            print("\n=== Game Start ===")
+            print("\n=== Game Start ===".center(width))
 
             board = data["game"]["board"]
             scores = data["game"]["scores"]
@@ -85,9 +88,16 @@ def play_game(sock, name):
             if turn == name:
                 while True:
                     try:
-                        row = int(input("Row: "))
-                        col = int(input("Col: "))
-                        letter = input("Enter S or O: ").upper()
+                        row, col, letter = input("row col letter: ").split()
+
+                        row = int(row)
+                        col = int(col)
+                        letter = letter.upper()
+
+                        #row = int(input("Row: "))
+                        #col = int(input("Col: "))
+                        #letter = input("Enter S or O: ").upper()
+
 
                         if letter not in ["S", "O"]:
                             print("Invalid letter, use S or O")
@@ -117,9 +127,11 @@ def play_game(sock, name):
             if turn == name:
                 while True:
                     try:
-                        row = int(input("Row: "))
-                        col = int(input("Col: "))
-                        letter = input("Enter S or O: ").upper()
+                        row, col, letter = input("row col letter: ").split()
+
+                        row = int(row)
+                        col = int(col)
+                        letter = letter.upper()
 
                         if letter not in ["S", "O"]:
                             print("Invalid letter, use S or O")
@@ -173,10 +185,19 @@ def show_leaderboard(sock):
        
 
         for player, stat in data["scores"].items():
-            print(player, ":", 
-              "{ 'win': ", stat["win"], 
-              ", 'lose': ", stat["lose"], 
-              ", 'tie': ", stat["tie"], "}")
+            win = stat["win"]
+            lose = stat["lose"]
+            tie = stat["tie"]
+
+            print(player, ":",
+                  "{ 'win':", win,
+                  ", 'lose':", lose,
+                  ", 'tie':", tie,
+                  "}")
+            #print(player, ":", 
+             # "{ 'win': ", stat["win"], 
+              #", 'lose': ", stat["lose"], 
+              #", 'tie': ", stat["tie"], "}")
 
 
 #   Main
